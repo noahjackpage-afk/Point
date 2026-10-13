@@ -23,8 +23,9 @@ enum ChatTableAlignment: Equatable {
     }
 }
 
-/// A block of assistant output. SwiftUI's Markdown support is inline-only, so
-/// block structure — tables above all — is parsed here and laid out natively.
+/// A block of rendered Markdown, such as release notes. SwiftUI's Markdown
+/// support is inline-only, so block structure — tables above all — is parsed
+/// here and laid out natively.
 enum ChatMarkdownBlock: Identifiable {
     case paragraph(String)
     case heading(level: Int, text: String)
@@ -51,7 +52,7 @@ enum ChatMarkdownBlock: Identifiable {
 }
 
 enum ChatMarkdownParser {
-    /// Line-oriented parse covering what chat models actually emit: tables,
+    /// Line-oriented parse covering common block-level Markdown: tables,
     /// headings, lists, fenced code, quotes, rules, and paragraphs.
     static func blocks(from text: String) -> [ChatMarkdownBlock] {
         var blocks: [ChatMarkdownBlock] = []

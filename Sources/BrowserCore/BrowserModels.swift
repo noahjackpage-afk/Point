@@ -176,8 +176,6 @@ public struct PersistedTab: Codable, Equatable, Identifiable, Sendable {
     public var folderID: TabFolderID?
     public var position: Int64
     public var navigationHistory: TabNavigationHistory?
-    /// True when the tab was opened by the AI assistant.
-    public var isAICreated: Bool
 
     public init(
         id: TabID,
@@ -188,8 +186,7 @@ public struct PersistedTab: Codable, Equatable, Identifiable, Sendable {
         spaceID: TabSpaceID = .default,
         folderID: TabFolderID? = nil,
         position: Int64,
-        navigationHistory: TabNavigationHistory? = nil,
-        isAICreated: Bool = false
+        navigationHistory: TabNavigationHistory? = nil
     ) {
         self.id = id
         self.title = title
@@ -200,7 +197,6 @@ public struct PersistedTab: Codable, Equatable, Identifiable, Sendable {
         self.folderID = folderID
         self.position = position
         self.navigationHistory = navigationHistory
-        self.isAICreated = isAICreated
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -213,7 +209,6 @@ public struct PersistedTab: Codable, Equatable, Identifiable, Sendable {
         case folderID
         case position
         case navigationHistory
-        case isAICreated
     }
 
     public init(from decoder: any Decoder) throws {
@@ -230,7 +225,6 @@ public struct PersistedTab: Codable, Equatable, Identifiable, Sendable {
             TabNavigationHistory.self,
             forKey: .navigationHistory
         )
-        isAICreated = try container.decodeIfPresent(Bool.self, forKey: .isAICreated) ?? false
     }
 }
 

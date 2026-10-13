@@ -1,6 +1,4 @@
 import AppKit
-import BrowserAI
-import BrowserAutomation
 import BrowserCore
 import BrowserEngine
 import SwiftUI
@@ -11,6 +9,11 @@ enum SidebarLayout {
     static let widthRange = 240.0...480.0
     static let floatingInset: CGFloat = 10
     static let resizeHandleWidth: CGFloat = 10
+    /// Extra distance a hidden sidebar travels so its drop shadow clears the window edge.
+    static let hiddenShadowClearance: CGFloat = 40
+    /// One spring for every part of a sidebar show/hide, so the sidebar, the page
+    /// edge and the window controls move as a single gesture.
+    static let animation = Animation.smooth(duration: 0.34)
 
     static func clamp(_ width: Double) -> Double {
         min(max(width, widthRange.lowerBound), widthRange.upperBound)
@@ -67,8 +70,8 @@ public struct BrowserWindowView: View {
     public var body: some View {
         ZStack(alignment: .leading) {
             WebSurface(model: model, sidebarWidth: sidebarWidth)
-                .padding(.leading, model.sidebarMode == .pinned ? sidebarWidth : 0)
-                .padding(.trailing, aiChatPanelWidth + extensionSidePanelWidth)
+                .modifier(AnimatableLeadingInset(inset: pinnedSidebarInset))
+                .padding(.trailing, extensionSidePanelWidth)
                 .clipShape(
                     LeadingRoundedRectangle(
                         radius: model.sidebarMode == .pinned ? 18 : 0
@@ -85,25 +88,10 @@ public struct BrowserWindowView: View {
             }
 
             ChromeWebStoreInstallBanner(model: model)
-                .padding(.leading, model.sidebarMode == .pinned ? sidebarWidth : 0)
-                .padding(.trailing, aiChatPanelWidth + extensionSidePanelWidth)
+                .modifier(AnimatableLeadingInset(inset: pinnedSidebarInset))
+                .padding(.trailing, extensionSidePanelWidth)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .zIndex(5)
-
-            if model.isAIChatPanelVisible {
-                AIChatPanelView(
-                    model: model,
-                    isFullScreen: isFullScreen
-                )
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: .trailing
-                    )
-                    .ignoresSafeArea()
-                    .transition(.move(edge: .trailing))
-                    .zIndex(6)
-            }
 
             if model.sidebarMode == .autoHide, model.previewTab == nil {
                 edgeSensor
@@ -146,7 +134,7 @@ public struct BrowserWindowView: View {
                 )
                 .ignoresSafeArea()
                 .offset(x: sidebarOffset)
-                .opacity(model.isSidebarVisible ? 1 : 0)
+                .opacity(model.isSidebarVisible || !reduceMotion ? 1 : 0)
                 .allowsHitTesting(model.isSidebarVisible && model.previewTab == nil)
                 .accessibilityHidden(!model.isSidebarVisible || model.previewTab != nil)
                 .onContinuousHover { phase in
@@ -196,19 +184,6 @@ public struct BrowserWindowView: View {
                     .zIndex(20)
             }
 
-            if !model.isAIChatPanelVisible,
-               let request = model.agentConsent.current {
-                AgentConsentCard(request: request) { approved in
-                    model.agentConsent.resolve(request.id, approved: approved)
-                }
-                .frame(width: 360)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.trailing, 18)
-                .padding(.bottom, 18)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(90)
-            }
-
             if let prompt = model.mediaPermissionPrompt {
                 MediaPermissionOverlay(prompt: prompt) { action in
                     model.resolveMediaPermission(action)
@@ -241,6 +216,9 @@ public struct BrowserWindowView: View {
                             .padding(.top, 72)
                     }
                 }
+                // Centre on the page area, not the whole window.
+                .padding(.leading, pinnedSidebarInset)
+                .padding(.trailing, extensionSidePanelWidth)
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
 
@@ -248,7 +226,7 @@ public struct BrowserWindowView: View {
                 FindOverlay(model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .padding(.top, 14)
-                    .padding(.trailing, 14 + aiChatPanelWidth)
+                    .padding(.trailing, 14)
             }
 
             if model.isSitePermissionsPresented {
@@ -361,6 +339,14 @@ public struct BrowserWindowView: View {
 
         }
         .frame(minWidth: 760, minHeight: 520)
+        // The window's own glass, behind the page and the pinned sidebar. While the
+        // sidebar slides it and the page edge briefly part; this keeps that gap
+        // reading as window chrome instead of showing the desktop.
+        .background {
+            Color.clear
+                .browserTintedGlass(tint: Color.accentColor.opacity(0.05))
+                .ignoresSafeArea()
+        }
         .background(
             WindowAccessor(
                 model: model,
@@ -372,12 +358,13 @@ public struct BrowserWindowView: View {
         )
         .focusedSceneValue(\.browserWindowModel, model)
         .animation(
-            reduceMotion ? nil : .easeInOut(duration: 0.22),
+            reduceMotion ? nil : SidebarLayout.animation,
             value: model.isSidebarVisible
         )
+        // Pinning a sidebar that is already showing changes only the mode.
         .animation(
-            reduceMotion ? nil : .easeInOut(duration: 0.22),
-            value: model.isAIChatPanelVisible
+            reduceMotion ? nil : SidebarLayout.animation,
+            value: model.sidebarMode
         )
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: model.isOmniboxPresented)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: indicatorDownload?.id)
@@ -425,11 +412,6 @@ public struct BrowserWindowView: View {
                 refreshPictureInPictureVisibility()
             }
         }
-        .onChange(of: model.agentConsent.current?.id) { _, requestID in
-            guard requestID != nil, !NSApp.isActive,
-                  let request = model.agentConsent.current else { return }
-            AgentConsentNotifier.notify(for: request)
-        }
         .onReceive(
             NotificationCenter.default.publisher(for: BrowserOnboarding.replayRequest)
         ) { _ in
@@ -455,10 +437,6 @@ public struct BrowserWindowView: View {
         model.extensionSidePanel != nil && !model.isPrivate ? 380 : 0
     }
 
-    private var aiChatPanelWidth: CGFloat {
-        model.isAIChatPanelVisible ? CGFloat(AIChatSettings.shared.panelWidth) : 0
-    }
-
     private func refreshPictureInPictureVisibility() {
         guard let hostWindow else { return }
         let visible = NSApp.isActive &&
@@ -480,7 +458,12 @@ public struct BrowserWindowView: View {
         guard !reduceMotion else { return 0 }
         return model.isSidebarVisible
             ? 0
-            : -(sidebarWidth + SidebarLayout.floatingInset * 2)
+            : -(sidebarWidth + SidebarLayout.floatingInset * 2 + SidebarLayout.hiddenShadowClearance)
+    }
+
+    /// Width the pinned sidebar takes from the page.
+    private var pinnedSidebarInset: CGFloat {
+        model.sidebarMode == .pinned ? sidebarWidth : 0
     }
 
     private var edgeSensor: some View {
@@ -794,8 +777,29 @@ private struct ReleaseUpdateOverlay: View {
     }
 }
 
+/// Leading padding that re-lays out on every animation frame. SwiftUI animates
+/// ordinary padding at render time, which a hosted AppKit view such as WKWebView
+/// never sees: it would jump to its final frame while the sidebar is still moving.
+private struct AnimatableLeadingInset: ViewModifier, Animatable {
+    var inset: CGFloat
+
+    nonisolated var animatableData: CGFloat {
+        get { inset }
+        set { inset = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.padding(.leading, inset)
+    }
+}
+
 private struct LeadingRoundedRectangle: Shape {
-    let radius: CGFloat
+    var radius: CGFloat
+
+    var animatableData: CGFloat {
+        get { radius }
+        set { radius = newValue }
+    }
 
     func path(in rect: CGRect) -> Path {
         let cornerRadius = min(radius, rect.width / 2, rect.height / 2)
@@ -1021,13 +1025,6 @@ private struct WebSurface: View {
                 }
             )
 
-            // Sits above the page, never inside it: the site must not be able
-            // to see, restyle, or counterfeit the "an agent is driving" cue.
-            // Deliberately not inset for an overlaying sidebar: the page keeps
-            // its full width there, and insetting the halo made it look like
-            // the page had been resized.
-            AgentControlOverlay(activity: model.agentActivity, tabID: tab.id)
-
             if tab.isShowingRestorationPlaceholder {
                 RestoringTabPlaceholder()
                     .transition(.opacity)
@@ -1060,8 +1057,7 @@ private struct SplitWebSurface: View {
             HStack(spacing: 0) {
                 SplitWebPane(
                     tab: tabs[0],
-                    blockedLeadingWidth: blockedLeadingWidth,
-                    agentActivity: model.agentActivity
+                    blockedLeadingWidth: blockedLeadingWidth
                 )
                 .frame(width: leftWidth)
 
@@ -1079,8 +1075,7 @@ private struct SplitWebSurface: View {
 
                 SplitWebPane(
                     tab: tabs[1],
-                    blockedLeadingWidth: 0,
-                    agentActivity: model.agentActivity
+                    blockedLeadingWidth: 0
                 )
                     .frame(width: max(0, contentWidth - leftWidth))
             }
@@ -1091,7 +1086,6 @@ private struct SplitWebSurface: View {
 private struct SplitWebPane: View {
     let tab: BrowserTab
     let blockedLeadingWidth: CGFloat
-    var agentActivity: AgentActivityCenter?
 
     var body: some View {
         ZStack {
@@ -1102,10 +1096,6 @@ private struct SplitWebPane: View {
                     onSwipeBack: { false },
                     onSwipeForward: { false }
                 )
-
-                if let agentActivity {
-                    AgentControlOverlay(activity: agentActivity, tabID: tab.id)
-                }
             } else {
                 Color(nsColor: .textBackgroundColor)
             }
@@ -1429,7 +1419,7 @@ private struct WindowAccessor: NSViewRepresentable {
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
             // Glass surfaces sample what is behind the window, so the desktop
-            // shows through the chat panel and the sidebar's floating edges.
+            // shows through the sidebar's floating edges.
             window.isOpaque = false
             window.backgroundColor = .clear
             window.minSize = NSSize(width: 760, height: 520)
@@ -1463,7 +1453,53 @@ private struct WindowAccessor: NSViewRepresentable {
                 }
 
                 // In full screen AppKit owns the traffic-light reveal on top-edge hover.
-                button.isHidden = isFullScreen ? false : !showsTrafficLights
+                setTrafficLight(button, visible: isFullScreen || showsTrafficLights)
+            }
+        }
+
+        /// Fades the window controls with the sidebar instead of popping them in
+        /// and out. A faded-out button is then hidden so it stops taking clicks.
+        private func setTrafficLight(_ button: NSButton, visible: Bool) {
+            if visible {
+                guard button.isHidden || button.alphaValue < 1 else { return }
+                if button.isHidden {
+                    button.alphaValue = 0
+                    button.isHidden = false
+                }
+                fade(button, to: 1)
+            } else {
+                guard !button.isHidden else { return }
+                fade(button, to: 0)
+            }
+        }
+
+        private func fade(_ button: NSButton, to alpha: CGFloat) {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                    ? 0
+                    : 0.2
+                button.animator().alphaValue = alpha
+            } completionHandler: { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.hideFadedTrafficLights()
+                }
+            }
+        }
+
+        private func hideFadedTrafficLights() {
+            guard let window,
+                  !showsTrafficLights,
+                  !window.styleMask.contains(.fullScreen)
+            else { return }
+            for type in [
+                NSWindow.ButtonType.closeButton,
+                .miniaturizeButton,
+                .zoomButton
+            ] {
+                guard let button = window.standardWindowButton(type),
+                      button.alphaValue == 0
+                else { continue }
+                button.isHidden = true
             }
         }
     }

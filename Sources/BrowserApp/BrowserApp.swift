@@ -1,5 +1,4 @@
 import AppKit
-import BrowserAI
 import BrowserCore
 import BrowserEngine
 import BrowserPersistence
@@ -11,7 +10,6 @@ import WebKit
 private enum BrowserSceneID {
     static let standard = "browser-window"
     static let privateBrowsing = "private-browser-window"
-    static let aiChat = "ai-chat-window"
 }
 
 @main
@@ -45,16 +43,6 @@ struct BrowserApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1180, height: 760)
-
-        WindowGroup(
-            BrowserLocalization.string("ai_chat_window_title"),
-            id: BrowserSceneID.aiChat,
-            for: UUID.self
-        ) { $token in
-            AIChatWindowView(token: token)
-        }
-        .defaultSize(width: 440, height: 640)
-        .windowResizability(.contentMinSize)
     }
 }
 
@@ -97,8 +85,7 @@ private final class BrowserRuntime {
                 downloadManager: privateDownloadManager,
                 faviconRepository: FaviconRepository(persistsToDisk: false),
                 isPrivate: true,
-                websiteDataStore: .nonPersistent(),
-                allowsExternalAgentAccess: false
+                websiteDataStore: .nonPersistent()
             )
         }
 
@@ -127,23 +114,15 @@ private final class BrowserRuntime {
             browsingHistoryRepository: browsingHistoryRepository,
             downloadManager: downloadManager,
             isPrivate: false,
-            websiteDataStore: .default(),
-            allowsExternalAgentAccess: isPrimaryWindow
+            websiteDataStore: .default()
         )
         standardWindowModels.append(WeakBrowserWindowModel(model))
         return model
     }
 
     func releaseWindowModel(_ model: BrowserWindowModel) {
-        let shouldPromote = model.hasExternalAgentOwnership
-        if shouldPromote {
-            model.setExternalAgentOwnership(false)
-        }
         standardWindowModels.removeAll {
             $0.value == nil || $0.value === model
-        }
-        if shouldPromote {
-            standardWindowModels.first?.value?.setExternalAgentOwnership(true)
         }
     }
 
@@ -250,16 +229,12 @@ private struct BrowserWindowScene: View {
                 model.openExtensionWindowRequest = { id in
                     openWindow(id: BrowserSceneID.standard, value: id)
                 }
-                model.openAIChatWindowRequest = { token in
-                    openWindow(id: BrowserSceneID.aiChat, value: token)
-                }
                 if !isPrivate, extensionRequestID == nil {
                     await runtime.performMaintenanceIfNeeded()
                     await runtime.startManualUpdateChecks()
                 }
                 await model.restoreSession()
                 if let extensionRequestID { model.completeExtensionWindowRequest(extensionRequestID) }
-                model.startExternalAgentAccessIfNeeded()
                 if !isPrivate,
                    let transferredTabs = BrowserWindowTransferCenter.shared
                     .claimNextBatch() {
@@ -702,8 +677,6 @@ private final class BrowserApplicationDelegate: NSObject, NSApplicationDelegate 
         isTerminationReplyPending = true
         Task { @MainActor [weak self] in
             await runtime.downloadManager.flushHistory()
-            await AIChatStore.shared.flush()
-            await AIMemoryStore.shared.flush()
             self?.isTerminationReplyPending = false
             sender.reply(toApplicationShouldTerminate: true)
         }

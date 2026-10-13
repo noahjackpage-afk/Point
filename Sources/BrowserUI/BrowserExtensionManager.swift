@@ -441,7 +441,6 @@ final class BrowserExtensionManager: NSObject, WKWebExtensionControllerDelegate,
         if model.extensionSidePanel?.id == id { return }
         sidePanelOwners.removeAll { $0.model == nil || $0.model === model }
         sidePanelOwners.append(WeakSidePanelOwner(model))
-        model.dismissAIChat()
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isInspectable = _isDebugAssertConfiguration()
         model.extensionSidePanel = BrowserExtensionSidePanel(id: id, title: context.webExtension.displayName ?? "",
@@ -452,7 +451,7 @@ final class BrowserExtensionManager: NSObject, WKWebExtensionControllerDelegate,
 
     func openOptions(id: UUID, model: BrowserWindowModel) {
         guard !model.isPrivate, let url = contexts[id]?.optionsPageURL else { return }
-        _ = model.openAssistantTab(url: url, inBackground: false, isAICreated: false)
+        _ = model.openTab(url: url, inBackground: false)
         model.dismissSettings()
     }
 
@@ -562,7 +561,7 @@ final class BrowserExtensionManager: NSObject, WKWebExtensionControllerDelegate,
         let oldIDs = model.tabs.map(\.id)
         let urls = configuration.tabURLs.isEmpty ? [URL(string: "about:blank")!] : configuration.tabURLs
         for (index, url) in urls.enumerated() {
-            _ = model.openAssistantTab(url: url, inBackground: index != 0, isAICreated: false)
+            _ = model.openTab(url: url, inBackground: index != 0)
         }
         for id in oldIDs { model.closeTab(id) }
         let frame = configuration.frame
@@ -579,7 +578,7 @@ final class BrowserExtensionManager: NSObject, WKWebExtensionControllerDelegate,
               let model = window.model, !model.isPrivate, windows.contains(where: { $0 === window }) else {
             completionHandler(nil, CocoaError(.featureUnsupported)); return
         }
-        let tab = model.openAssistantTab(url: configuration.url ?? URL(string: "about:blank")!, inBackground: !configuration.shouldBeActive, isAICreated: false)
+        let tab = model.openTab(url: configuration.url ?? URL(string: "about:blank")!, inBackground: !configuration.shouldBeActive)
         model.setPinned(configuration.shouldBePinned, for: tab.id)
         model.extensionMoveTab(tab.id, to: configuration.index)
         window.sync()

@@ -1,6 +1,4 @@
 import AppKit
-import BrowserAI
-import BrowserAutomation
 import BrowserCore
 import BrowserEngine
 import Foundation
@@ -19,8 +17,6 @@ public final class BrowserTab: Identifiable {
     public var spaceID: TabSpaceID
     public var folderID: TabFolderID?
     public var position: Int64
-    /// True when the AI assistant opened this tab; shown with a sparkle badge.
-    public var isAICreated: Bool
     public var lifecycleState: TabLifecycleState
     public var progress: Double = 0
     public var isLoading = false
@@ -55,7 +51,6 @@ public final class BrowserTab: Identifiable {
         spaceID = snapshot.spaceID
         folderID = snapshot.folderID
         position = snapshot.position
-        isAICreated = snapshot.isAICreated
         lifecycleState = .evicted
         canGoBack = navigationHistory.backIndex != nil
         canGoForward = navigationHistory.forwardIndex != nil
@@ -71,8 +66,7 @@ public final class BrowserTab: Identifiable {
             spaceID: spaceID,
             folderID: folderID,
             position: position,
-            navigationHistory: navigationHistory,
-            isAICreated: isAICreated
+            navigationHistory: navigationHistory
         )
     }
 
@@ -312,27 +306,6 @@ public final class BrowserWindowModel: WebEngineEventSink {
     public var openExtensionWindowRequest: (@MainActor (UUID) -> Void)?
     public var openWindowRequest: (@MainActor (_ isPrivate: Bool) -> Void)?
 
-    /// One assistant conversation per browsing window.
-    public let aiChat = AIChatSession()
-    public private(set) var isAIChatPresented = false
-    public var openAIChatWindowRequest: (@MainActor (_ token: UUID) -> Void)?
-    @ObservationIgnored private var aiToolBridge: BrowserAIToolBridge?
-
-    public private(set) var isExternalAgentAccessEnabled = false
-    public private(set) var automaticallyAllowsExternalAgentControl = false
-    var externalAgentServerState: PointMCPServerState = .stopped
-    @ObservationIgnored private var pointMCPServer: PointMCPServer?
-    @ObservationIgnored private var pointMCPRestartTask: Task<Void, Never>?
-    @ObservationIgnored private var pointMCPRestartAttempt = 0
-    @ObservationIgnored private var allowsExternalAgentAccess: Bool
-    @ObservationIgnored private var agentControlReservationID: UUID?
-
-    /// What the assistant is doing to the page right now, for the blue glow
-    /// and the click markers drawn over the web surface.
-    public let agentActivity = AgentActivityCenter()
-    /// The gate the assistant has to pass before anything irreversible.
-    public let agentConsent = AgentConsentCenter()
-
     private let repository: any SessionRepository
     private let sitePermissionRepository: any SitePermissionRepository
     private let browsingHistoryRepository: any BrowsingHistoryRepository
@@ -387,8 +360,7 @@ public final class BrowserWindowModel: WebEngineEventSink {
         passkeyAccessManager: PasskeyAccessManager? = nil,
         faviconRepository: FaviconRepository? = nil,
         isPrivate: Bool = false,
-        websiteDataStore: WKWebsiteDataStore? = nil,
-        allowsExternalAgentAccess: Bool = true
+        websiteDataStore: WKWebsiteDataStore? = nil
     ) {
         let storedSearchEngine = UserDefaults.standard
             .string(forKey: "DefaultSearchEngine")
@@ -398,7 +370,6 @@ public final class BrowserWindowModel: WebEngineEventSink {
         self.sitePermissionRepository = sitePermissionRepository
         self.browsingHistoryRepository = browsingHistoryRepository
         self.isPrivate = isPrivate
-        self.allowsExternalAgentAccess = allowsExternalAgentAccess && !isPrivate
         self.websiteDataStore = websiteDataStore
             ?? (isPrivate ? .nonPersistent() : .default())
         self.showsMemoryUsage = UserDefaults.standard.bool(
@@ -406,12 +377,6 @@ public final class BrowserWindowModel: WebEngineEventSink {
         )
         self.isPreviewTipDismissed = UserDefaults.standard.bool(
             forKey: Self.previewTipDismissedKey
-        )
-        self.isExternalAgentAccessEnabled = self.allowsExternalAgentAccess && UserDefaults.standard.bool(
-            forKey: "PointExternalAgentAccessEnabled"
-        )
-        self.automaticallyAllowsExternalAgentControl = UserDefaults.standard.bool(
-            forKey: "PointExternalAgentAutoApproveControl"
         )
         self.searchEngine = storedSearchEngine
         self.parser = parser ?? OmniboxParser(searchEngine: storedSearchEngine)
@@ -1962,239 +1927,10 @@ public final class BrowserWindowModel: WebEngineEventSink {
         isSidebarVisible = false
     }
 
-    // MARK: - AI assistant
-
-    /// Whether the chat should occupy the trailing panel of this window.
-    public var isAIChatPanelVisible: Bool {
-        isAIChatPresented && !aiChat.isDetached
-    }
-
-    public func toggleAIChat() {
-        if isAIChatPanelVisible {
-            dismissAIChat()
-        } else {
-            presentAIChat()
-        }
-    }
-
-    public func presentAIChat() {
-        extensionSidePanel = nil
-        guard previewTab == nil else { return }
-        AIChatSettings.shared.loadAPIKeysIfNeeded()
-        prepareAIChatIfNeeded()
-        aiChat.isDetached = false
-        isAIChatPresented = true
-    }
-
-    public func dismissAIChat() {
-        isAIChatPresented = false
-    }
-
-    /// Moves the conversation into its own window; the panel collapses and the
-    /// same session object keeps streaming there.
-    public func detachAIChat() {
-        prepareAIChatIfNeeded()
-        guard let openAIChatWindowRequest else { return }
-        let token = UUID()
-        aiChat.isDetached = true
-        isAIChatPresented = false
-        AIChatWindowBridge.shared.stage(aiChat, token: token)
-        openAIChatWindowRequest(token)
-    }
-
-    /// Takes the browser back from the assistant mid-task: cancels the turn,
-    /// drops the grant, and answers every pending confirmation with "no".
-    public func stopAgentControl() {
-        aiChat.cancelStreaming()
-        aiToolBridge?.releaseBrowserControl()
-        pointMCPServer?.releaseAllControl()
-    }
-
-    func reserveAgentControl(_ id: UUID) -> Bool {
-        guard agentControlReservationID == nil || agentControlReservationID == id else {
-            return false
-        }
-        agentControlReservationID = id
-        return true
-    }
-
-    func releaseAgentControlReservation(_ id: UUID) {
-        guard agentControlReservationID == id else { return }
-        agentControlReservationID = nil
-    }
-
-    public func startExternalAgentAccessIfNeeded() {
-        guard isExternalAgentAccessEnabled, allowsExternalAgentAccess else { return }
-        startExternalAgentServer()
-    }
-
-    public var hasExternalAgentOwnership: Bool { allowsExternalAgentAccess }
-
-    public func setExternalAgentOwnership(_ ownsAccess: Bool) {
-        guard !isPrivate, allowsExternalAgentAccess != ownsAccess else { return }
-        allowsExternalAgentAccess = ownsAccess
-        isExternalAgentAccessEnabled = UserDefaults.standard.bool(
-            forKey: "PointExternalAgentAccessEnabled"
-        )
-        if ownsAccess, isExternalAgentAccessEnabled {
-            startExternalAgentServer()
-        } else if !ownsAccess {
-            pointMCPRestartTask?.cancel()
-            pointMCPRestartTask = nil
-            pointMCPServer?.stop()
-            pointMCPServer = nil
-        }
-    }
-
-    public func setExternalAgentAccessEnabled(_ enabled: Bool) {
-        guard allowsExternalAgentAccess else { return }
-        isExternalAgentAccessEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: "PointExternalAgentAccessEnabled")
-        if enabled {
-            startExternalAgentServer()
-        } else {
-            pointMCPRestartTask?.cancel()
-            pointMCPRestartTask = nil
-            pointMCPServer?.stop()
-            pointMCPServer = nil
-        }
-    }
-
-    public func setAutomaticallyAllowsExternalAgentControl(_ enabled: Bool) {
-        guard allowsExternalAgentAccess else { return }
-        automaticallyAllowsExternalAgentControl = enabled
-        UserDefaults.standard.set(enabled, forKey: "PointExternalAgentAutoApproveControl")
-    }
-
-    var pointMCPHelperPath: String {
-        Bundle.main.bundleURL
-            .appending(path: "Contents/Helpers/point-browser-mcp")
-            .path
-    }
-
-    private func startExternalAgentServer() {
-        guard pointMCPServer == nil else { return }
-        let server = PointMCPServer(
-            bridgeFactory: { [weak self] in
-                guard let self else { fatalError("Browser window closed") }
-                return BrowserAIToolBridge(
-                    model: self,
-                    automaticallyApprovesControl: { [weak self] in
-                        self?.automaticallyAllowsExternalAgentControl ?? false
-                    }
-                )
-            },
-            stateHandler: { [weak self] state in
-                self?.externalAgentServerState = state
-                if case .failed = state {
-                    self?.scheduleExternalAgentServerRestart()
-                } else if state == .listening || state == .connected {
-                    self?.pointMCPRestartAttempt = 0
-                }
-            }
-        )
-        pointMCPServer = server
-        server.start()
-    }
-
-    private func scheduleExternalAgentServerRestart() {
-        guard isExternalAgentAccessEnabled, allowsExternalAgentAccess,
-              pointMCPRestartTask == nil else { return }
-        pointMCPRestartAttempt += 1
-        let delay = min(30, 1 << min(pointMCPRestartAttempt - 1, 5))
-        pointMCPRestartTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled, let self,
-                  self.isExternalAgentAccessEnabled,
-                  self.allowsExternalAgentAccess else { return }
-            self.pointMCPServer?.stop()
-            self.pointMCPServer = nil
-            self.pointMCPRestartTask = nil
-            self.startExternalAgentServer()
-        }
-    }
-
-    /// The live web view for a tab, prepared for the agent to work in whether
-    /// or not the person is looking at it.
-    ///
-    /// A tab that is not on screen has no layout size, so every element would
-    /// measure zero and the agent would read the page as empty. Giving the
-    /// view a desktop-sized frame makes WebKit lay the page out properly even
-    /// unhosted, which is what lets the agent work in the background.
-    func webView(for id: TabID) -> WKWebView? {
-        guard let tab = tab(id) else { return nil }
-        let engine = ensureEngine(for: tab)
-        if engine.webView.superview == nil, engine.webView.bounds.width < 8 {
-            engine.webView.frame = CGRect(x: 0, y: 0, width: 1280, height: 900)
-        }
-        // A tab restored from eviction has an engine but no content yet; only
-        // the selected tab gets loaded on activation.
-        if !tab.hasLoadedInitialURL, let url = tab.url {
-            tab.hasLoadedInitialURL = true
-            engine.load(url)
-        }
-        return engine.webView
-    }
-
-    func agentLoad(_ url: URL, in id: TabID) {
-        navigate(tabID: id, to: .url(url))
-    }
-
-    func agentGoBack(in id: TabID) {
-        goBack(tabID: id)
-    }
-
-    private func prepareAIChatIfNeeded() {
-        guard aiToolBridge == nil else { return }
-        let bridge = BrowserAIToolBridge(model: self)
-        aiToolBridge = bridge
-        aiChat.toolExecutor = bridge
-        aiChat.onReattachRequest = { [weak self] in
-            self?.isAIChatPresented = true
-        }
-        aiChat.onStopAgentRequest = { [weak self] in
-            self?.stopAgentControl()
-        }
-        aiChat.onOpenURL = { [weak self] url in
-            // A link in the chat belongs in this browser, not another app.
-            guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
-                return
-            }
-            self?.openAssistantTab(url: url, inBackground: false)
-        }
-    }
-
-    /// Creates a folder with a given name without starting an inline rename,
-    /// used when the chat organizes tabs.
+    /// Opens a new tab, optionally loading it in the background without
+    /// selecting it. Used by extensions and their options pages.
     @discardableResult
-    func createNamedFolder(
-        _ name: String,
-        symbolName: String? = nil,
-        containing tabIDs: Set<TabID>
-    ) -> TabFolderID {
-        let id = TabFolderID()
-        folders.append(
-            TabFolder(
-                snapshot: PersistedTabFolder(
-                    id: id,
-                    name: name,
-                    symbolName: symbolName ?? "folder.fill",
-                    spaceID: selectedSpaceID,
-                    position: nextPosition(in: nil)
-                )
-            )
-        )
-        if tabIDs.isEmpty {
-            persist()
-        } else {
-            moveTabs(tabIDs, to: id)
-        }
-        return id
-    }
-
-    /// Opens a tab on behalf of the assistant, marked with the sparkle badge.
-    @discardableResult
-    func openAssistantTab(url: URL, inBackground: Bool, isAICreated: Bool = true) -> BrowserTab {
+    func openTab(url: URL, inBackground: Bool) -> BrowserTab {
         let tab = BrowserTab(
             snapshot: PersistedTab(
                 id: TabID(),
@@ -2202,8 +1938,7 @@ public final class BrowserWindowModel: WebEngineEventSink {
                 url: url,
                 isPinned: false,
                 spaceID: selectedSpaceID,
-                position: nextPosition(in: nil),
-                isAICreated: isAICreated
+                position: nextPosition(in: nil)
             )
         )
         tabs.append(tab)
@@ -2959,7 +2694,6 @@ public final class BrowserWindowModel: WebEngineEventSink {
     public func stopLifecycleMonitoring() {
         if !isPrivate { extensionManager.unregister(self) }
         acceptsMediaPermissionRequests = false
-        aiChat.cancelStreaming()
         pressureSequence += 1
         sitePermissionManagementTask?.cancel()
         sitePermissionManagementTask = nil
@@ -3488,11 +3222,6 @@ public final class BrowserWindowModel: WebEngineEventSink {
     ) -> TabProtectionReason {
         var reasons = tab.engineProtectionReasons
         if isVisibleSplitTab(tab.id) {
-            reasons.insert(.active)
-        }
-        // Evicting the tab the agent is working in would discard the page
-        // mid-task and reload it under the agent's feet.
-        if agentActivity.controlledTabID == tab.id {
             reasons.insert(.active)
         }
         if now < tab.evictionGraceUntil {

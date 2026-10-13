@@ -1,5 +1,4 @@
 @preconcurrency import AppKit
-import BrowserAutomation
 import BrowserCore
 import Observation
 import SwiftUI
@@ -29,26 +28,28 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        Group {
-            if model.sidebarMode == .pinned {
-                sidebarBase
-                    .browserTintedGlass(tint: Color.accentColor.opacity(0.05))
-                    .background {
-                        if isFullScreen, !reduceTransparency {
-                            FullScreenPanelBackdropView()
-                        }
-                    }
-                    .contentShape(Rectangle())
-            } else {
-                sidebarBase
-                    .browserGlassSurface(cornerRadius: 20)
-                    .shadow(color: .black.opacity(0.16), radius: 24, x: 6, y: 8)
-                    .contentShape(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    )
+        // One view for both modes, so pinning and unpinning animate the corner,
+        // glass and shadow instead of swapping in a different view mid-slide.
+        // Pinned, the sidebar sits on the window's own glass backdrop rather than
+        // drawing its own, so it reads as part of the window, as in Arc.
+        let isPinned = model.sidebarMode == .pinned
+        let cornerRadius: CGFloat = isPinned ? 0 : 20
+        sidebarBase
+            .browserTintedGlass(
+                cornerRadius: cornerRadius,
+                backingOpacity: BrowserGlassBacking.floatingOpacity,
+                showsGlass: !isPinned
+            )
+            .background {
+                if isPinned, isFullScreen, !reduceTransparency {
+                    FullScreenPanelBackdropView()
+                }
             }
-        }
-        .simultaneousGesture(sidebarReorderGesture)
+            .shadow(color: .black.opacity(isPinned ? 0 : 0.16), radius: 24, x: 6, y: 8)
+            .contentShape(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            )
+            .simultaneousGesture(sidebarReorderGesture)
     }
 
     private var sidebarBase: some View {
@@ -380,15 +381,6 @@ struct SidebarView: View {
             .help(model.activeTab?.isLoading == true
                 ? BrowserLocalization.string("stop")
                 : BrowserLocalization.string("reload"))
-
-            Button {
-                model.toggleAIChat()
-            } label: {
-                Image(systemName: "sparkles.rectangle.stack")
-                .frame(width: 24, height: 24)
-            }
-            .help(BrowserLocalization.string("ai_chat_toggle_shortcut"))
-            .accessibilityLabel(BrowserLocalization.string("ai_chat_toggle"))
 
             BrowserExtensionsMenu(model: model)
 
@@ -1631,24 +1623,6 @@ private struct TabRow: View {
         .frame(minHeight: 36)
         .contentShape(Rectangle())
         .background { selectionBackground }
-        .overlay { agentControlBorder }
-    }
-
-    /// Marks the tab the assistant is working in. It usually runs in the
-    /// background, so the sidebar is the only place the person can see which
-    /// tab that is without opening each one.
-    @ViewBuilder
-    private var agentControlBorder: some View {
-        if model.agentActivity.controlledTabID == tab.id {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(Color.accentAgent, lineWidth: 1.5)
-                .shadow(color: Color.accentAgent.opacity(0.55), radius: 5)
-                .transition(.opacity)
-                .animation(
-                    reduceMotion ? nil : .easeOut(duration: 0.25),
-                    value: model.agentActivity.controlledTabID
-                )
-        }
     }
 
     private var tabTitle: some View {
@@ -1825,7 +1799,7 @@ private struct FolderTree: View {
     }
 }
 
-extension AnyTransition {
+private extension AnyTransition {
     /// Used where a list reveals its rows one after another.
     static var staggeredListItem: AnyTransition {
         .asymmetric(
@@ -2107,7 +2081,7 @@ private struct FolderRow: View {
     }
 }
 
-struct FolderSymbolOption: Identifiable {
+private struct FolderSymbolOption: Identifiable {
     let symbolName: String
     let title: String
 
@@ -2495,18 +2469,6 @@ struct TabFavicon: View {
             }
         }
         .frame(width: size, height: size)
-        .overlay(alignment: .bottomTrailing) {
-            if tab.isAICreated {
-                Image(systemName: "sparkle")
-                    .font(.system(size: size * 0.34, weight: .bold))
-                    .foregroundStyle(Color.accentColor)
-                    .padding(1.5)
-                    .background(.background, in: Circle())
-                    .offset(x: size * 0.16, y: size * 0.16)
-                    .help(BrowserLocalization.string("ai_tab_badge"))
-                    .accessibilityLabel(BrowserLocalization.string("ai_tab_badge"))
-            }
-        }
     }
 }
 

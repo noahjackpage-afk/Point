@@ -28,7 +28,7 @@ struct BrowserExtensionTests {
         let websiteUA = try await website.evaluateJavaScript("navigator.userAgent") as? String
         #expect(websiteUA?.contains(" Chrome/") == false)
         let options = try #require(context.optionsPageURL)
-        let tab = model.openAssistantTab(url: options, inBackground: false, isAICreated: false)
+        let tab = model.openTab(url: options, inBackground: false)
         let view = try #require(tab.engine?.webView)
         _ = try await waitForJavaScript("document.body?.textContent || ''", in: view)
         let reply = try await view.callAsyncJavaScript("return await browser.runtime.sendMessage({probe:true})", contentWorld: .page) as? [String: Any]
@@ -107,7 +107,7 @@ struct BrowserExtensionTests {
         manager.register(model)
         defer { manager.unregister(model) }
         let options = try #require(context.optionsPageURL)
-        let tab = model.openAssistantTab(url: options, inBackground: false, isAICreated: false)
+        let tab = model.openTab(url: options, inBackground: false)
         let original = try #require(tab.engine)
         let body = try await waitForJavaScript("document.body?.textContent || ''", in: original.webView)
         #expect(body == "Point extension options")
@@ -408,7 +408,7 @@ struct BrowserExtensionTests {
         let model = BrowserWindowModel(repository: InMemorySessionRepository(),
             sitePermissionRepository: InMemorySitePermissionRepository(),
             browsingHistoryRepository: InMemoryBrowsingHistoryRepository(),
-            isPrivate: isPrivate, websiteDataStore: isPrivate ? .nonPersistent() : manager.controller.configuration.defaultWebsiteDataStore, allowsExternalAgentAccess: false)
+            isPrivate: isPrivate, websiteDataStore: isPrivate ? .nonPersistent() : manager.controller.configuration.defaultWebsiteDataStore)
         model.extensionManager = manager
         return model
     }

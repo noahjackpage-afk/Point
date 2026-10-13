@@ -9,8 +9,7 @@ let package = Package(
         .macOS(.v26)
     ],
     products: [
-        .executable(name: "Browser", targets: ["BrowserApp"]),
-        .executable(name: "point-browser-mcp", targets: ["PointBrowserMCP"])
+        .executable(name: "Browser", targets: ["BrowserApp"])
     ],
     targets: [
         .target(
@@ -27,24 +26,13 @@ let package = Package(
             dependencies: ["BrowserCore"]
         ),
         .target(
-            name: "BrowserAutomation",
-            dependencies: ["BrowserCore"]
-        ),
-        .target(
-            name: "BrowserAI",
-            dependencies: ["BrowserCore", "BrowserAutomation"]
-        ),
-        .target(
             name: "BrowserUI",
-            dependencies: ["BrowserCore", "BrowserEngine", "BrowserAI", "BrowserAutomation"],
+            dependencies: ["BrowserCore", "BrowserEngine"],
             resources: [.process("Resources")]
         ),
         .executableTarget(
             name: "BrowserApp",
-            dependencies: ["BrowserCore", "BrowserEngine", "BrowserPersistence", "BrowserUI", "BrowserAI", "BrowserAutomation"]
-        ),
-        .executableTarget(
-            name: "PointBrowserMCP"
+            dependencies: ["BrowserCore", "BrowserEngine", "BrowserPersistence", "BrowserUI"]
         ),
         .testTarget(
             name: "BrowserCoreTests",
@@ -59,16 +47,8 @@ let package = Package(
             dependencies: ["BrowserCore", "BrowserPersistence"]
         ),
         .testTarget(
-            name: "BrowserAITests",
-            dependencies: ["BrowserAI", "BrowserAutomation"]
-        ),
-        .testTarget(
             name: "BrowserUITests",
             dependencies: ["BrowserCore", "BrowserUI", "BrowserPersistence"]
-        ),
-        .testTarget(
-            name: "BrowserAutomationTests",
-            dependencies: ["BrowserAutomation"]
         )
     ],
     swiftLanguageModes: [.v6]

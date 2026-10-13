@@ -22,8 +22,8 @@ struct BrowserExtensionsSettingsView: View {
                     }
                     .disabled(storeLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button(BrowserLocalization.string("extensions_store_browse")) {
-                        model.openAssistantTab(url: URL(string: "https://chromewebstore.google.com/category/extensions")!,
-                                               inBackground: false, isAICreated: false)
+                        model.openTab(url: URL(string: "https://chromewebstore.google.com/category/extensions")!,
+                                      inBackground: false)
                     }
                 }
                 .disabled(manager.isBusy || !manager.canModify || model.isPrivate)

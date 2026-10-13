@@ -169,7 +169,7 @@ final class ExtensionTabAdapter: NSObject, WKWebExtensionTab {
     }
     func duplicate(using configuration: WKWebExtension.TabConfiguration, for context: WKWebExtensionContext, completionHandler: @escaping ((any WKWebExtensionTab)?, (any Error)?) -> Void) {
         guard let owner, let model = owner.model else { completionHandler(nil, CocoaError(.featureUnsupported)); return }
-        let duplicate = model.openAssistantTab(url: configuration.url ?? tab?.url ?? URL(string: "about:blank")!, inBackground: !configuration.shouldBeActive, isAICreated: false)
+        let duplicate = model.openTab(url: configuration.url ?? tab?.url ?? URL(string: "about:blank")!, inBackground: !configuration.shouldBeActive)
         model.setPinned(configuration.shouldBePinned, for: duplicate.id)
         owner.sync()
         completionHandler(owner.adapters.first { $0.id == duplicate.id }, nil)

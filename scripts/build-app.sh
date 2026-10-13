@@ -9,7 +9,6 @@ APP_DIR="${PROJECT_DIR}/dist/Point.app"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
-HELPERS_DIR="${CONTENTS_DIR}/Helpers"
 APP_ICON="${PROJECT_DIR}/icon.icon"
 APP_ICON_INFO="${BUILD_ROOT}/BrowserAppIcon-Info.plist"
 cd "${PROJECT_DIR}"
@@ -26,9 +25,8 @@ fi
     --format stringsAndStringsdict
 
 rm -rf "${APP_DIR}"
-mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${HELPERS_DIR}"
+mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 cp "${BUILD_ROOT}/${CONFIGURATION}/Browser" "${MACOS_DIR}/Browser"
-cp "${BUILD_ROOT}/${CONFIGURATION}/point-browser-mcp" "${HELPERS_DIR}/point-browser-mcp"
 cp "Resources/Info.plist" "${CONTENTS_DIR}/Info.plist"
 cp -R "Resources/en.lproj" "${RESOURCES_DIR}/"
 cp -R "Resources/ru.lproj" "${RESOURCES_DIR}/"
@@ -58,14 +56,13 @@ if [[ -z "${SIGNING_IDENTITY}" ]]; then
 fi
 if [[ -z "${SIGNING_IDENTITY}" ]]; then
     SIGNING_IDENTITY=-
-    print -u2 "No signing identity available; ad-hoc builds may prompt for Keychain access after rebuilding."
+    print -u2 "No signing identity available; falling back to ad-hoc signing."
 fi
 codesign_arguments=(
     --force
     --sign "${SIGNING_IDENTITY}"
     --entitlements "Resources/Browser.entitlements"
 )
-codesign --force --sign "${SIGNING_IDENTITY}" "${HELPERS_DIR}/point-browser-mcp"
 codesign "${codesign_arguments[@]}" "${APP_DIR}"
 codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 

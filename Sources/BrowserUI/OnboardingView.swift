@@ -49,9 +49,6 @@ private enum OnboardingPage: Int, CaseIterable, Identifiable {
     case welcome
     case split
     case search
-    case chatTools
-    case browserUse
-    case assistant
     case folders
     case defaultBrowser
 
@@ -62,9 +59,6 @@ private enum OnboardingPage: Int, CaseIterable, Identifiable {
         case .welcome: BrowserLocalization.string("onboarding_welcome_title")
         case .split: BrowserLocalization.string("onboarding_split_title")
         case .search: BrowserLocalization.string("onboarding_search_title")
-        case .chatTools: BrowserLocalization.string("onboarding_chat_tools_title")
-        case .browserUse: BrowserLocalization.string("onboarding_browser_use_title")
-        case .assistant: BrowserLocalization.string("onboarding_assistant_title")
         case .folders: BrowserLocalization.string("onboarding_folders_title")
         case .defaultBrowser: BrowserLocalization.string("onboarding_default_title")
         }
@@ -75,9 +69,6 @@ private enum OnboardingPage: Int, CaseIterable, Identifiable {
         case .welcome: BrowserLocalization.string("onboarding_welcome_detail")
         case .split: BrowserLocalization.string("onboarding_split_detail")
         case .search: BrowserLocalization.string("onboarding_search_detail")
-        case .chatTools: BrowserLocalization.string("onboarding_chat_tools_detail")
-        case .browserUse: BrowserLocalization.string("onboarding_browser_use_detail")
-        case .assistant: BrowserLocalization.string("onboarding_assistant_detail")
         case .folders: BrowserLocalization.string("onboarding_folders_detail")
         case .defaultBrowser: BrowserLocalization.string("default_browser_detail")
         }
@@ -91,12 +82,6 @@ private enum OnboardingPage: Int, CaseIterable, Identifiable {
             [Color(red: 0.43, green: 0.36, blue: 0.94), Color(red: 0.69, green: 0.31, blue: 0.88)]
         case .search:
             [Color(red: 1.00, green: 0.48, blue: 0.35), Color(red: 0.96, green: 0.24, blue: 0.55)]
-        case .chatTools:
-            [Color(red: 0.36, green: 0.31, blue: 0.86), Color(red: 0.14, green: 0.56, blue: 0.90)]
-        case .browserUse:
-            [Color(red: 0.10, green: 0.64, blue: 0.72), Color(red: 0.12, green: 0.35, blue: 0.92)]
-        case .assistant:
-            [Color(red: 0.98, green: 0.62, blue: 0.15), Color(red: 0.91, green: 0.32, blue: 0.45)]
         case .folders:
             [Color(red: 0.07, green: 0.72, blue: 0.51), Color(red: 0.05, green: 0.58, blue: 0.65)]
         case .defaultBrowser:
@@ -116,11 +101,6 @@ struct OnboardingOverlay: View {
     @State private var defaultBrowserError: String?
 
     private let cardWidth: CGFloat = 660
-
-    /// The setup page trades artwork height for room to enter credentials.
-    private var artworkHeight: CGFloat {
-        page == .assistant ? 140 : 250
-    }
 
     var body: some View {
         ZStack {
@@ -171,7 +151,7 @@ struct OnboardingOverlay: View {
                 .id(page)
                 .transition(artworkTransition)
         }
-        .frame(height: artworkHeight)
+        .frame(height: 250)
         .frame(maxWidth: .infinity)
         .clipShape(
             UnevenRoundedRectangle(
@@ -201,11 +181,6 @@ struct OnboardingOverlay: View {
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            if page == .assistant {
-                AIProviderSetupControls()
-                    .padding(.top, 6)
-            }
 
             if page == .defaultBrowser {
                 defaultBrowserStatus
@@ -418,221 +393,8 @@ private struct OnboardingArtwork: View {
         case .welcome: WelcomeArtwork()
         case .split: SplitArtwork()
         case .search: SearchArtwork()
-        case .chatTools: ChatToolsArtwork()
-        case .browserUse: BrowserUseArtwork()
-        case .assistant: AssistantArtwork()
         case .folders: FoldersArtwork()
         case .defaultBrowser: DefaultBrowserArtwork()
-        }
-    }
-}
-
-/// A mock chat panel beside a mock page: the assistant answers about the page.
-/// What the chat can reach for, as a grid of capability cards.
-private struct ChatToolsArtwork: View {
-    private struct Capability: Identifiable {
-        let symbol: String
-        let title: String
-        var id: String { symbol }
-    }
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var highlighted = 0
-
-    private let capabilities = [
-        Capability(
-            symbol: "magnifyingglass",
-            title: BrowserLocalization.string("onboarding_capability_search")
-        ),
-        Capability(
-            symbol: "camera.viewfinder",
-            title: BrowserLocalization.string("onboarding_capability_screenshot")
-        ),
-        Capability(
-            symbol: "chevron.left.forwardslash.chevron.right",
-            title: BrowserLocalization.string("onboarding_capability_python")
-        ),
-        Capability(
-            symbol: "brain",
-            title: BrowserLocalization.string("onboarding_capability_memory")
-        ),
-        Capability(
-            symbol: "folder.badge.plus",
-            title: BrowserLocalization.string("onboarding_capability_folders")
-        ),
-        Capability(
-            symbol: "paperclip",
-            title: BrowserLocalization.string("onboarding_capability_attachments")
-        )
-    ]
-
-    private let columns = Array(
-        repeating: GridItem(.fixed(132), spacing: 10),
-        count: 3
-    )
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(Array(capabilities.enumerated()), id: \.element.id) { index, capability in
-                VStack(spacing: 6) {
-                    Image(systemName: capability.symbol)
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
-                    Text(capability.title)
-                        .font(.system(size: 11, weight: .medium))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                .frame(width: 132, height: 66)
-                .background(MockSurface(cornerRadius: 12))
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
-                .scaleEffect(index == highlighted ? 1.05 : 1)
-            }
-        }
-        .task {
-            guard !reduceMotion else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(900))
-                guard !Task.isCancelled else { return }
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                    highlighted = (highlighted + 1) % capabilities.count
-                }
-            }
-        }
-    }
-}
-
-private struct BrowserUseArtwork: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var activeStep = 0
-
-    private let steps = [
-        ("magnifyingglass", "onboarding_browser_use_step_search"),
-        ("cursorarrow.click.2", "onboarding_browser_use_step_click"),
-        ("cart.badge.plus", "onboarding_browser_use_step_cart"),
-        ("checkmark.shield", "onboarding_browser_use_step_ask")
-    ]
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            MockWindowFrame(width: 246, height: 150) {
-                VStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(0.22))
-                        .frame(height: 22)
-                        .overlay(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.white.opacity(0.58))
-                                .frame(width: 82, height: 6)
-                                .padding(.leading, 9)
-                        }
-
-                    HStack(spacing: 8) {
-                        ForEach(0..<3, id: \.self) { index in
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(Color.white.opacity(index == 1 ? 0.32 : 0.18))
-                                .frame(height: 70)
-                        }
-                    }
-
-                    Capsule()
-                        .fill(Color.white.opacity(0.38))
-                        .frame(width: 96, height: 10)
-                }
-                .padding(12)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                    HStack(spacing: 7) {
-                        Image(systemName: step.0)
-                            .font(.system(size: 12, weight: .semibold))
-                            .frame(width: 18)
-                        Text(BrowserLocalization.string(step.1))
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .frame(height: 27)
-                    .background(
-                        Color.white.opacity(index == activeStep ? 0.28 : 0.14),
-                        in: Capsule()
-                    )
-                    .scaleEffect(index == activeStep ? 1.06 : 1)
-                }
-            }
-        }
-        .task {
-            guard !reduceMotion else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(850))
-                guard !Task.isCancelled else { return }
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
-                    activeStep = (activeStep + 1) % steps.count
-                }
-            }
-        }
-    }
-}
-
-private struct AssistantArtwork: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showsReply = false
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            MockPage(accent: Color(red: 0.24, green: 0.51, blue: 0.96))
-                .frame(width: 110, height: 104)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
-
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Spacer(minLength: 16)
-                    Capsule()
-                        .fill(Color.accentColor.opacity(0.32))
-                        .frame(width: 82, height: 11)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Capsule().fill(Color.primary.opacity(0.16)).frame(height: 6)
-                    Capsule().fill(Color.primary.opacity(0.16)).frame(height: 6)
-                    Capsule()
-                        .fill(Color.primary.opacity(0.16))
-                        .frame(width: 76, height: 6)
-                }
-                .opacity(showsReply ? 1 : 0.2)
-                .offset(y: showsReply ? 0 : 4)
-
-                Spacer(minLength: 0)
-
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.primary.opacity(0.08))
-                    .frame(height: 22)
-                    .overlay(alignment: .trailing) {
-                        Circle()
-                            .fill(Color.accentColor)
-                            .frame(width: 14, height: 14)
-                            .padding(.trailing, 5)
-                    }
-            }
-            .padding(10)
-            .frame(width: 150, height: 104)
-            .background(MockSurface(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
-        }
-        .task {
-            guard !reduceMotion else {
-                showsReply = true
-                return
-            }
-            while !Task.isCancelled {
-                withAnimation(.easeOut(duration: 0.6)) { showsReply = true }
-                try? await Task.sleep(for: .milliseconds(2600))
-                guard !Task.isCancelled else { return }
-                withAnimation(.easeIn(duration: 0.3)) { showsReply = false }
-                try? await Task.sleep(for: .milliseconds(700))
-            }
         }
     }
 }
