@@ -216,7 +216,7 @@ struct SidebarView: View {
                 SpaceSwitcher(model: model)
                 BrowserExtensionsMenu(model: model)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(SidebarIconButtonStyle())
             .padding(.horizontal, 10)
             .padding(.top, 7)
             .padding(.bottom, 10)
@@ -420,7 +420,7 @@ struct SidebarView: View {
                 ? BrowserLocalization.string("stop")
                 : BrowserLocalization.string("reload"))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(SidebarIconButtonStyle())
     }
 
     private var sidebarReorderGesture: some Gesture {
@@ -1499,7 +1499,7 @@ private struct PinnedTabCard: View {
                         .frame(width: 18, height: 18)
                         .background(.thinMaterial, in: Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SidebarIconButtonStyle(shape: .circle))
                 .padding(5)
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
             .accessibilityLabel(BrowserLocalization.string(
@@ -1634,8 +1634,8 @@ private struct TabRow: View {
                 extendingSelection: NSEvent.modifierFlags.contains(.shift)
             )
         } label: { rowLabel }
-        .buttonStyle(.plain)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isHovering)
+        .buttonStyle(SidebarRowButtonStyle())
+        .animation(reduceMotion ? nil : SidebarHover.animation, value: isHovering)
         .onHover { isHovering = $0 }
         .opacity(reorderState.draggedTabIDs.contains(tab.id) ? 0 : 1)
         .background(itemLayoutReader)
@@ -1663,7 +1663,11 @@ private struct TabRow: View {
         .padding(.horizontal, 8)
         .frame(minHeight: 36)
         .contentShape(Rectangle())
-        .background { selectionBackground }
+        .background {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(rowFill)
+                .animation(reduceMotion ? nil : SidebarHover.animation, value: rowFill)
+        }
     }
 
     private var tabTitle: some View {
@@ -1687,22 +1691,25 @@ private struct TabRow: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.caption.weight(.semibold))
-                    .frame(width: 18, height: 18)
+                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SidebarIconButtonStyle(shape: .circle))
+            .transition(.opacity.combined(with: .scale(scale: 0.7)))
             .accessibilityLabel(closeAccessibilityLabel)
         }
     }
 
-    @ViewBuilder
-    private var selectionBackground: some View {
-        if model.selectedTabIDs.contains(tab.id) {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(
-                    model.selectedTabID == tab.id
-                        ? Color.primary.opacity(0.11)
-                        : Color.accentColor.opacity(0.13)
-                )
+    /// Selected, part of a multi-selection, hovered, or nothing — one shape whose
+    /// fill animates, so the highlight fades rather than appearing and vanishing.
+    private var rowFill: Color {
+        if model.selectedTabID == tab.id {
+            Color.primary.opacity(0.11)
+        } else if model.selectedTabIDs.contains(tab.id) {
+            Color.accentColor.opacity(0.13)
+        } else if isHovering {
+            SidebarHover.rowHoverFill
+        } else {
+            .clear
         }
     }
 
@@ -1868,6 +1875,8 @@ private struct FolderRow: View {
     @State private var visibleChildCount = 0
     @State private var childAnimationTask: Task<Void, Never>?
 
+    @State private var isHovering = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
@@ -1933,9 +1942,11 @@ private struct FolderRow: View {
                     .fill(
                         (reorderState.placement(for: .folder(folder.id)) ?? dropPlacement) == .inside
                             ? Color.accentColor.opacity(0.16)
-                            : Color.primary.opacity(0.035)
+                            : Color.primary.opacity(isHovering ? 0.075 : 0.035)
                     )
+                    .animation(reduceMotion ? nil : SidebarHover.animation, value: isHovering)
             }
+            .onHover { isHovering = $0 }
             .overlay {
                 SidebarDropIndicator(
                     placement: reorderState.placement(for: .folder(folder.id)) ?? dropPlacement,
@@ -2456,13 +2467,14 @@ private struct NewTabRow: View {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
                                 .stroke(Color.accentColor.opacity(0.45), lineWidth: 1)
                         }
-                } else if isHovering {
+                } else {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(.primary.opacity(0.055))
+                        .fill(isHovering ? SidebarHover.rowHoverFill : .clear)
                 }
             }
+            .animation(SidebarHover.animation, value: isHovering)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SidebarRowButtonStyle())
         .onHover { isHovering = $0 }
         .background {
             SidebarItemLayoutReader(
