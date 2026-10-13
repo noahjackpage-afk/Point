@@ -52,6 +52,8 @@ public struct BrowserWindowView: View {
     @State private var animatingBookmarkID: UUID?
     @State private var bookmarkAnimationTask: Task<Void, Never>?
     @State private var isUpdateDetailsPresented = false
+    /// Where the new-tab input's centre sits, as a fraction of the window height.
+    private static let newTabInputCenterFraction: CGFloat = 0.3
     @Environment(\.openSettings) private var openSettings
     @AppStorage(BrowserSettingsSection.selectionDefaultsKey)
     private var settingsSelection: BrowserSettingsSection = .general
@@ -208,8 +210,12 @@ public struct BrowserWindowView: View {
                 Group {
                     if model.isComposingNewTab {
                         GeometryReader { geometry in
-                            // Anchor the 56-point input row, independently of the results below it.
-                            let topInset = max(0, geometry.size.height / 2 - 28)
+                            // Anchor the 56-point input row, independently of the results below
+                            // it, in the upper part of the window as Dia does, not dead centre.
+                            let topInset = max(
+                                0,
+                                geometry.size.height * Self.newTabInputCenterFraction - 28
+                            )
                             OmniboxOverlay(
                                 model: model,
                                 maximumSuggestionsHeight: max(0, geometry.size.height - topInset - 56 - 14)
