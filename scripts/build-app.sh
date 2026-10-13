@@ -14,15 +14,21 @@ APP_ICON_INFO="${BUILD_ROOT}/BrowserAppIcon-Info.plist"
 cd "${PROJECT_DIR}"
 swift build -c "${CONFIGURATION}" --scratch-path "${BUILD_ROOT}"
 
-XCSTRINGSTOOL="$(xcode-select -p)/usr/bin/xcstringstool"
-if [[ ! -x "${XCSTRINGSTOOL}" ]]; then
-    print -u2 "xcstringstool is required to compile Localizable.xcstrings."
-    exit 1
+# Swift 6.4+ compiles the string catalog into the bundle's Contents/Resources
+# itself. Older toolchains copy it uncompiled, so compile it here only then:
+# writing into a bundle SwiftPM already sealed breaks its next code signature.
+CORE_BUNDLE="${BUILD_ROOT}/${CONFIGURATION}/Browser_BrowserCore.bundle"
+if [[ ! -f "${CORE_BUNDLE}/Contents/Resources/en.lproj/Localizable.strings" ]]; then
+    XCSTRINGSTOOL="$(xcode-select -p)/usr/bin/xcstringstool"
+    if [[ ! -x "${XCSTRINGSTOOL}" ]]; then
+        print -u2 "xcstringstool is required to compile Localizable.xcstrings."
+        exit 1
+    fi
+    "${XCSTRINGSTOOL}" compile \
+        "Sources/BrowserCore/Resources/Localizable.xcstrings" \
+        --output-directory "${CORE_BUNDLE}" \
+        --format stringsAndStringsdict
 fi
-"${XCSTRINGSTOOL}" compile \
-    "Sources/BrowserCore/Resources/Localizable.xcstrings" \
-    --output-directory "${BUILD_ROOT}/${CONFIGURATION}/Browser_BrowserCore.bundle" \
-    --format stringsAndStringsdict
 
 rm -rf "${APP_DIR}"
 mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"

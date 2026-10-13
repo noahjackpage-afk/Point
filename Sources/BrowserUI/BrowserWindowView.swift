@@ -9,6 +9,10 @@ enum SidebarLayout {
     static let widthRange = 240.0...480.0
     static let floatingInset: CGFloat = 10
     static let resizeHandleWidth: CGFloat = 10
+    /// Where the window controls end and how far down their centre sits, in
+    /// window points. The sidebar's top row lines its buttons up beside them.
+    static let windowControlsTrailingEdge: CGFloat = 84
+    static let windowControlsCenterY: CGFloat = 28
     /// Extra distance a hidden sidebar travels so its drop shadow clears the window edge.
     static let hiddenShadowClearance: CGFloat = 40
     /// One spring for every part of a sidebar show/hide, so the sidebar, the page
@@ -1358,9 +1362,34 @@ private struct WindowAccessor: NSViewRepresentable {
         var isPrivate = false
         var onFullScreenChange: (@MainActor (Bool) -> Void)?
         var lastReportedFullScreen: Bool?
+        weak var model: BrowserWindowModel?
+        private var escapeMonitor: Any?
 
-        deinit {
+        isolated deinit {
             NotificationCenter.default.removeObserver(self)
+            if let escapeMonitor {
+                NSEvent.removeMonitor(escapeMonitor)
+            }
+        }
+
+        /// Panels such as Settings and History never take keyboard focus from
+        /// the page, so their own Escape handling rarely fires. Catch Escape for
+        /// the window instead and close the frontmost panel, if there is one.
+        private func installEscapeMonitorIfNeeded() {
+            guard escapeMonitor == nil else { return }
+            escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                self?.handleEscape(event) ?? event
+            }
+        }
+
+        private func handleEscape(_ event: NSEvent) -> NSEvent? {
+            guard let window,
+                  event.window === window,
+                  event.keyCode == 53,
+                  event.modifierFlags.isDisjoint(with: .deviceIndependentFlagsMask),
+                  model?.dismissFrontmostPanel() == true
+            else { return event }
+            return nil
         }
 
         func configure(
@@ -1370,6 +1399,7 @@ private struct WindowAccessor: NSViewRepresentable {
             onFullScreenChange: @escaping @MainActor (Bool) -> Void
         ) {
             guard let window else { return }
+            installEscapeMonitorIfNeeded()
             self.showsTrafficLights = showsTrafficLights
             self.isPrivate = isPrivate
             self.onFullScreenChange = onFullScreenChange
@@ -1510,6 +1540,7 @@ private struct WindowAccessor: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
+        context.coordinator.model = model
         DispatchQueue.main.async {
             model.setHostWindow(view.window)
             context.coordinator.configure(

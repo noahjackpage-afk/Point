@@ -1,6 +1,14 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "tabs_menu": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Tabs"}}, "ru": {"stringUnit": {"state": "translated", "value": "Вкладки"}}}},
+    "show_next_tab": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Show Next Tab"}}, "ru": {"stringUnit": {"state": "translated", "value": "Следующая вкладка"}}}},
+    "show_previous_tab": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Show Previous Tab"}}, "ru": {"stringUnit": {"state": "translated", "value": "Предыдущая вкладка"}}}},
+    "tab_number": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Tab %@"}}, "ru": {"stringUnit": {"state": "translated", "value": "Вкладка %@"}}}},
+    "last_tab": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Last Tab"}}, "ru": {"stringUnit": {"state": "translated", "value": "Последняя вкладка"}}}},
+    "zoom_in": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Zoom In"}}, "ru": {"stringUnit": {"state": "translated", "value": "Увеличить"}}}},
+    "zoom_out": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Zoom Out"}}, "ru": {"stringUnit": {"state": "translated", "value": "Уменьшить"}}}},
+    "actual_size": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Actual Size"}}, "ru": {"stringUnit": {"state": "translated", "value": "Исходный размер"}}}},
     "omnibox_recent_search": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Recent search"}}, "ru": {"stringUnit": {"state": "translated", "value": "Недавний запрос"}}}},
     "omnibox_open_site": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Open website"}}, "ru": {"stringUnit": {"state": "translated", "value": "Открыть сайт"}}}},
     "extensions_store_offer": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Install this extension in Point?"}}, "ru": {"stringUnit": {"state": "translated", "value": "Установить это расширение в Point?"}}}},

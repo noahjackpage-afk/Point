@@ -117,6 +117,27 @@ public struct BrowserCommands: Commands {
 
             Divider()
 
+            Button(BrowserLocalization.string("zoom_in")) {
+                model?.zoomActivePage(by: 1)
+            }
+            // ⌘= rather than ⌘+, which needs Shift on most layouts; Safari does the same.
+            .keyboardShortcut("=")
+            .disabled(model?.activeTab?.engine == nil)
+
+            Button(BrowserLocalization.string("zoom_out")) {
+                model?.zoomActivePage(by: -1)
+            }
+            .keyboardShortcut("-")
+            .disabled(model?.activeTab?.engine == nil)
+
+            Button(BrowserLocalization.string("actual_size")) {
+                model?.resetActivePageZoom()
+            }
+            .keyboardShortcut("0")
+            .disabled(model?.activeTab?.engine == nil)
+
+            Divider()
+
             Toggle(
                 BrowserLocalization.string("show_memory_usage"),
                 isOn: Binding(
@@ -125,6 +146,31 @@ public struct BrowserCommands: Commands {
                 )
             )
             .disabled(model == nil)
+        }
+
+        CommandMenu(BrowserLocalization.string("tabs_menu")) {
+            Button(BrowserLocalization.string("show_next_tab")) {
+                model?.selectAdjacentTab(offset: 1)
+            }
+            .keyboardShortcut("]", modifiers: [.command, .shift])
+
+            Button(BrowserLocalization.string("show_previous_tab")) {
+                model?.selectAdjacentTab(offset: -1)
+            }
+            .keyboardShortcut("[", modifiers: [.command, .shift])
+
+            Divider()
+
+            ForEach(1...9, id: \.self) { number in
+                Button(
+                    number == 9
+                        ? BrowserLocalization.string("last_tab")
+                        : BrowserLocalization.string("tab_number", String(number))
+                ) {
+                    model?.selectTab(shortcutNumber: number)
+                }
+                .keyboardShortcut(KeyEquivalent(Character(String(number))))
+            }
         }
 
         CommandMenu(BrowserLocalization.string("history")) {

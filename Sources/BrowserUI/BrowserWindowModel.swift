@@ -653,6 +653,7 @@ public final class BrowserWindowModel: WebEngineEventSink {
     }
 
     public func presentSitePermissions() {
+        dismissSettings()
         isSitePermissionsPresented = true
         reloadSitePermissions()
     }
@@ -722,6 +723,7 @@ public final class BrowserWindowModel: WebEngineEventSink {
 
     public func presentBrowsingHistory() {
         dismissOmnibox()
+        dismissSettings()
         isSitePermissionsPresented = false
         sitePermissionManagementTask?.cancel()
         sitePermissionManagementTask = nil
@@ -775,6 +777,7 @@ public final class BrowserWindowModel: WebEngineEventSink {
 
     public func presentClearBrowsingData() {
         dismissOmnibox()
+        dismissSettings()
         dismissSitePermissions()
         dismissBrowsingHistory()
         clearBrowsingDataStatus = nil
@@ -798,6 +801,24 @@ public final class BrowserWindowModel: WebEngineEventSink {
 
     public func dismissSettings() {
         presentedSettingsSection = nil
+    }
+
+    /// Closes the frontmost modal panel for Escape. Returns false when none is
+    /// open, so the key still reaches the page.
+    @discardableResult
+    public func dismissFrontmostPanel() -> Bool {
+        if presentedSettingsSection != nil {
+            dismissSettings()
+        } else if isClearBrowsingDataPresented {
+            dismissClearBrowsingData()
+        } else if isBrowsingHistoryPresented {
+            dismissBrowsingHistory()
+        } else if isSitePermissionsPresented {
+            dismissSitePermissions()
+        } else {
+            return false
+        }
+        return true
     }
 
     public func clearSelectedBrowsingData() {
@@ -1883,6 +1904,47 @@ public final class BrowserWindowModel: WebEngineEventSink {
         sidebarMode = sidebarMode == .pinned ? .autoHide : .pinned
         isSidebarVisible = sidebarMode == .pinned
         persist()
+    }
+
+    // MARK: - Keyboard navigation
+
+    /// Selects the tab `offset` places away in sidebar order, wrapping around.
+    public func selectAdjacentTab(offset: Int) {
+        let order = tabSelectionOrder
+        guard !order.isEmpty else { return }
+        let current = order.firstIndex { $0.id == selectedTabID } ?? 0
+        let index = ((current + offset) % order.count + order.count) % order.count
+        selectTab(order[index].id)
+    }
+
+    /// ⌘1–⌘8 pick that tab in sidebar order; ⌘9 always picks the last, as in Safari.
+    public func selectTab(shortcutNumber number: Int) {
+        let order = tabSelectionOrder
+        guard !order.isEmpty else { return }
+        let index = number == 9 ? order.count - 1 : number - 1
+        guard order.indices.contains(index) else { return }
+        selectTab(order[index].id)
+    }
+
+    private static let pageZoomLevels: [CGFloat] = [
+        0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3
+    ]
+
+    /// Steps the active page through the standard zoom levels.
+    public func zoomActivePage(by step: Int) {
+        guard let webView = activeTab?.engine?.webView else { return }
+        let current = webView.pageZoom
+        let levels = Self.pageZoomLevels
+        let next = step > 0
+            ? levels.first { $0 > current + 0.001 }
+            : levels.last { $0 < current - 0.001 }
+        if let next {
+            webView.pageZoom = next
+        }
+    }
+
+    public func resetActivePageZoom() {
+        activeTab?.engine?.webView.pageZoom = 1
     }
 
     public func toggleMemoryUsageDisplay() {

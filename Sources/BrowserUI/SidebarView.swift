@@ -88,8 +88,8 @@ struct SidebarView: View {
     private var sidebarContent: some View {
         VStack(spacing: 0) {
             navigationHeader
-                .padding(.horizontal, 12)
-                .padding(.top, isFullScreen ? 12 : 38)
+                .padding(.horizontal, Self.headerHorizontalPadding)
+                .padding(.top, headerTopPadding)
                 .padding(.bottom, 10)
 
             if model.isPrivate {
@@ -211,10 +211,15 @@ struct SidebarView: View {
                     .padding(.bottom, 4)
             }
 
-            SpaceSwitcher(model: model)
-                .padding(.horizontal, 10)
-                .padding(.top, 7)
-                .padding(.bottom, 10)
+            HStack(spacing: 6) {
+                SidebarDownloadsButton(model: model)
+                SpaceSwitcher(model: model)
+                BrowserExtensionsMenu(model: model)
+            }
+            .buttonStyle(.borderless)
+            .padding(.horizontal, 10)
+            .padding(.top, 7)
+            .padding(.bottom, 10)
 
             if let availableUpdate {
                 UpdateAvailableSidebarRow(
@@ -331,8 +336,39 @@ struct SidebarView: View {
         }
     }
 
+    private static let headerHorizontalPadding: CGFloat = 12
+    private static let headerButtonSize: CGFloat = 24
+    private static let headerSpacing: CGFloat = 6
+
+    /// The floating sidebar is inset from the window, but the window controls
+    /// are not; offset the top row so it stays level with them either way.
+    private var windowInset: CGFloat {
+        model.sidebarMode == .pinned ? 0 : SidebarLayout.floatingInset
+    }
+
+    private var headerTopPadding: CGFloat {
+        guard !isFullScreen else { return 12 }
+        return SidebarLayout.windowControlsCenterY - Self.headerButtonSize / 2 - windowInset
+    }
+
+    /// Room left for the window controls at the start of the top row. In full
+    /// screen AppKit shows them only on hover, over the page, so none is needed.
+    private var windowControlsReserve: CGFloat {
+        guard !isFullScreen else { return 0 }
+        let gap: CGFloat = 8
+        return max(
+            0,
+            SidebarLayout.windowControlsTrailingEdge + gap
+                - Self.headerHorizontalPadding - Self.headerSpacing - windowInset
+        )
+    }
+
     private var navigationHeader: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Self.headerSpacing) {
+            Color.clear
+                .frame(width: windowControlsReserve, height: Self.headerButtonSize)
+                .accessibilityHidden(true)
+
             Button {
                 model.toggleSidebarMode()
             } label: {
@@ -345,6 +381,8 @@ struct SidebarView: View {
             .accessibilityLabel(model.sidebarMode == .autoHide
                 ? BrowserLocalization.string("pin_sidebar")
                 : BrowserLocalization.string("hide_sidebar"))
+
+            Spacer(minLength: 0)
 
             Button {
                 guard let id = model.selectedTabID else { return }
@@ -381,36 +419,6 @@ struct SidebarView: View {
             .help(model.activeTab?.isLoading == true
                 ? BrowserLocalization.string("stop")
                 : BrowserLocalization.string("reload"))
-
-            BrowserExtensionsMenu(model: model)
-
-            Spacer()
-
-            Button {
-                model.toggleDownloads()
-            } label: {
-                Image(
-                    systemName: model.isDownloadsPresented
-                        ? "arrow.down.circle.fill"
-                        : "arrow.down.circle"
-                )
-                .frame(width: 24, height: 24)
-            }
-            .help(BrowserLocalization.string("downloads_shortcut"))
-            .accessibilityLabel(BrowserLocalization.string("downloads"))
-            .popover(
-                isPresented: Binding(
-                    get: { model.isDownloadsPresented },
-                    set: { model.isDownloadsPresented = $0 }
-                ),
-                arrowEdge: .bottom
-            ) {
-                DownloadsPopoverView(
-                    manager: model.downloadManager,
-                    onResume: model.resumeDownload
-                )
-                .frame(width: 380)
-            }
         }
         .buttonStyle(.borderless)
     }
@@ -432,6 +440,39 @@ struct SidebarView: View {
         }
     }
 
+}
+
+/// Downloads, in the sidebar's bottom bar beside the spaces, as in Arc.
+private struct SidebarDownloadsButton: View {
+    let model: BrowserWindowModel
+
+    var body: some View {
+        Button {
+            model.toggleDownloads()
+        } label: {
+            Image(
+                systemName: model.isDownloadsPresented
+                    ? "arrow.down.circle.fill"
+                    : "arrow.down.circle"
+            )
+            .frame(width: 24, height: 24)
+        }
+        .help(BrowserLocalization.string("downloads_shortcut"))
+        .accessibilityLabel(BrowserLocalization.string("downloads"))
+        .popover(
+            isPresented: Binding(
+                get: { model.isDownloadsPresented },
+                set: { model.isDownloadsPresented = $0 }
+            ),
+            arrowEdge: .top
+        ) {
+            DownloadsPopoverView(
+                manager: model.downloadManager,
+                onResume: model.resumeDownload
+            )
+            .frame(width: 380)
+        }
+    }
 }
 
 private struct UpdateAvailableSidebarRow: View {
