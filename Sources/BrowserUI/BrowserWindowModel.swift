@@ -653,7 +653,6 @@ public final class BrowserWindowModel: WebEngineEventSink {
     }
 
     public func presentSitePermissions() {
-        dismissSettings()
         isSitePermissionsPresented = true
         reloadSitePermissions()
     }
@@ -723,7 +722,6 @@ public final class BrowserWindowModel: WebEngineEventSink {
 
     public func presentBrowsingHistory() {
         dismissOmnibox()
-        dismissSettings()
         isSitePermissionsPresented = false
         sitePermissionManagementTask?.cancel()
         sitePermissionManagementTask = nil
@@ -777,7 +775,6 @@ public final class BrowserWindowModel: WebEngineEventSink {
 
     public func presentClearBrowsingData() {
         dismissOmnibox()
-        dismissSettings()
         dismissSitePermissions()
         dismissBrowsingHistory()
         clearBrowsingDataStatus = nil
@@ -807,9 +804,7 @@ public final class BrowserWindowModel: WebEngineEventSink {
     /// open, so the key still reaches the page.
     @discardableResult
     public func dismissFrontmostPanel() -> Bool {
-        if presentedSettingsSection != nil {
-            dismissSettings()
-        } else if isClearBrowsingDataPresented {
+        if isClearBrowsingDataPresented {
             dismissClearBrowsingData()
         } else if isBrowsingHistoryPresented {
             dismissBrowsingHistory()

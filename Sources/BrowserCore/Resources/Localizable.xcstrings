@@ -1,6 +1,8 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "extensions_no_window": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "No Browser Window"}}, "ru": {"stringUnit": {"state": "translated", "value": "Нет окна браузера"}}}},
+    "extensions_no_window_detail": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Open a browser window to manage extensions."}}, "ru": {"stringUnit": {"state": "translated", "value": "Откройте окно браузера, чтобы управлять расширениями."}}}},
     "tabs_menu": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Tabs"}}, "ru": {"stringUnit": {"state": "translated", "value": "Вкладки"}}}},
     "show_next_tab": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Show Next Tab"}}, "ru": {"stringUnit": {"state": "translated", "value": "Следующая вкладка"}}}},
     "show_previous_tab": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Show Previous Tab"}}, "ru": {"stringUnit": {"state": "translated", "value": "Предыдущая вкладка"}}}},

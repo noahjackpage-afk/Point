@@ -43,6 +43,10 @@ struct BrowserApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1180, height: 760)
+
+        Settings {
+            BrowserSettingsView(windowModels: { runtime.standardModels })
+        }
     }
 }
 
@@ -58,6 +62,11 @@ private final class BrowserRuntime {
     )
     private var privateDownloadManagers: [WeakDownloadManager] = []
     private var standardWindowModels: [WeakBrowserWindowModel] = []
+
+    /// Open, non-private browser windows.
+    var standardModels: [BrowserWindowModel] {
+        standardWindowModels.compactMap(\.value)
+    }
     private var hasClaimedOnboarding = false
 
     init() {

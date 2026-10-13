@@ -52,6 +52,9 @@ public struct BrowserWindowView: View {
     @State private var animatingBookmarkID: UUID?
     @State private var bookmarkAnimationTask: Task<Void, Never>?
     @State private var isUpdateDetailsPresented = false
+    @Environment(\.openSettings) private var openSettings
+    @AppStorage(BrowserSettingsSection.selectionDefaultsKey)
+    private var settingsSelection: BrowserSettingsSection = .general
 
     public init(
         model: BrowserWindowModel,
@@ -321,25 +324,6 @@ public struct BrowserWindowView: View {
                 .zIndex(71)
             }
 
-            if model.presentedSettingsSection != nil {
-                Color.black.opacity(0.22)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture { model.dismissSettings() }
-                    .zIndex(80)
-
-                GeometryReader { proxy in
-                    BrowserSettingsView(model: model)
-                        .frame(
-                            width: min(640, max(520, proxy.size.width - 40)),
-                            height: min(500, max(420, proxy.size.height - 40))
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .ignoresSafeArea()
-                .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                .zIndex(81)
-            }
 
         }
         .frame(minWidth: 760, minHeight: 520)
@@ -378,10 +362,13 @@ public struct BrowserWindowView: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: model.isClearBrowsingDataPresented)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: model.toastMessage)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.24), value: isOnboardingPresented)
-        .animation(
-            reduceMotion ? nil : .easeOut(duration: 0.18),
-            value: model.presentedSettingsSection
-        )
+        // Settings is its own window; a request from this one picks the tab.
+        .onChange(of: model.presentedSettingsSection) { _, section in
+            guard let section else { return }
+            settingsSelection = section
+            model.dismissSettings()
+            openSettings()
+        }
         .onPreferenceChange(BookmarkSpaceFramePreferenceKey.self) { frame in
             bookmarkTargetFrame = frame
             startBookmarkAnimationIfReady()
